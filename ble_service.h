@@ -60,21 +60,25 @@ NRF_SDH_BLE_OBSERVER(_name ## _obs,                                             
 		ble_service_on_ble_evt, &_name)
 
 #define DEVICE_INFO_UUID_SERVICE 0x180A
-#define DEVICE_SERIAL_UUID_CHAR 0x2A25
-#define DEVICE_HW_UUID_CHAR 0x2A27
-#define DEVICE_SW_UUID_CHAR 0x2A28
+#define DEVICE_MODEL_NUMBER_UUID_CHAR 0x2A24
+#define DEVICE_SERIAL_NUMBER_UUID_CHAR 0x2A25
+#define DEVICE_HW_REVISION_UUID_CHAR 0x2A27
+#define DEVICE_SW_REVISION_UUID_CHAR 0x2A28
 #define DEVCIE_MANUFACTURER_CHAR 0x2A29
 
 #define BLE_UUID_BASE        {0xBD, 0xE9, 0x6A, 0xF2, 0x08, 0x69, 0x11, 0xEC, \
         0x9A, 0x03, 0x02, 0x42, 0x00, 0x00, 0x00, 0x03}
-#define BLE_UUID_SERVICE     0xAC13
+
+#define BLE_IDLE_UUID_SCAN_SERVICE     0xAC12
+#define BLE_DATA_READY_UUID_SCAN_SERVICE     0xAC13
 
 #define BLE_UUID_DEVICE_SERVICE     0xAC14
-#define BLE_UUID_DEVICE_CHAR 0xAC15
+#define BLE_UUID_AGGREGATOR_DEVICE_CHAR 0xAC15
+#define BLE_UUID_STREAM_DEVICE_CHAR 0xAC16
 
 typedef enum {
 
-	BLE_DEVICE_CHAR = 0x01,
+	BLE_AGGREGATOR_CHAR = 0x01, BLE_STREAM_CHAR
 
 } BLE_NOTIFY_EVENTS_CHAR;
 
@@ -88,7 +92,8 @@ typedef void (*ble_service_notify_state_event_handler_t)(uint16_t conn_handle,
 		ble_service_t *p_service, uint8_t p_event_notify_char, uint8_t p_event);
 
 typedef void (*ble_service_write_handler_t)(uint16_t conn_handle,
-		ble_service_t *p_service, uint8_t const *buffer, uint8_t buffer_size);
+		ble_service_t *p_service, uint8_t event_type, uint8_t const *buffer,
+		uint8_t buffer_size);
 
 /** @brief BLE Service init structure. This structure contains all options and data needed for
  *        initialization of the service.*/
@@ -102,14 +107,16 @@ typedef struct {
 struct ble_service_s {
 
 	uint16_t device_info_service_handle;
-	ble_gatts_char_handles_t device_info_serial_handles;
-	ble_gatts_char_handles_t device_info_hw_handles;
-	ble_gatts_char_handles_t device_info_sw_handles;
+	ble_gatts_char_handles_t device_info_model_number_handles;
+	ble_gatts_char_handles_t device_info_serial_number_handles;
+	ble_gatts_char_handles_t device_info_hw_revision_handles;
+	ble_gatts_char_handles_t device_info_sw_revision_handles;
 	ble_gatts_char_handles_t device_info_manufacturer_handles;
 
 	uint8_t uuid_type;
 	uint16_t device_service_handle;
-	ble_gatts_char_handles_t device_char_handles;
+	ble_gatts_char_handles_t device_aggregator_char_handles;
+	ble_gatts_char_handles_t device_stream_char_handles;
 
 	ble_service_tx_complete_handler_t ble_service_tx_complete_handler;
 	ble_service_notify_state_event_handler_t ble_service_notify_state_event_handler;
@@ -137,7 +144,10 @@ void ble_service_on_ble_evt(ble_evt_t const *p_ble_evt, void *p_context);
  *
  * @retval NRF_SUCCESS If the notification was sent successfully. Otherwise, an error code is returned.
  */
-uint32_t ble_service_send_notification(uint16_t conn_handle,
+uint32_t ble_service_send_aggregator_notification(uint16_t conn_handle,
+		ble_service_t *p_service, uint8_t *buffer, uint16_t buffer_length);
+
+uint32_t ble_service_send_stream_notification(uint16_t conn_handle,
 		ble_service_t *p_service, uint8_t *buffer, uint16_t buffer_length);
 
 #ifdef __cplusplus

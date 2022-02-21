@@ -30,6 +30,12 @@ Bluetooth Smart ECG PPG collects key vital signs information such as ECG, heart 
 This is an example provided to quickly test various service scenarios that require communication between Android, iOS, and Aggregator.
 <br>
 
+네이버 스마트 스토어에서 구매 가능합니다.
+<br>
+
+[네이버 스마트 스토어](https://smartstore.naver.com/axden)
+<br>
+
 -------------------------
 
 ### Bluetooth Smart ECG PPG 의 주요 특징 및 기능

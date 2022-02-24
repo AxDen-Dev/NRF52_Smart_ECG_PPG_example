@@ -66,6 +66,9 @@ Learn Edge AI using sensor information stored in the AxDen Aggregator Platform.
 terminal baudrate : 9600
 <br>
 
+[Donwload Android Application](https://play.google.com/store/apps/details?id=io.axden.module.example.axden_ble_module_example)
+<br>
+
 <table>
   <tr align="center">
     <td> Terminal </td>

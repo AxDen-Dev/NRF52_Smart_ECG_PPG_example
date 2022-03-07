@@ -20,39 +20,42 @@
 
 -------------------------
 
-Bluetooth Smart ECG PPG 은 AxDen 의 Aggregator Platform 를 이용하여 ECG(심전도), Heart rate(심박수), SPO2(산소포화도), 온도 와 같은 핵심적인 활력 징후(Vital Signs) 정보를 수집합니다.
-<br>
-Android, iOS, Aggregator 간의 통신이 필요한 다양한 서비스 시나리오를 빠르게 테스트 할 수 있도록 제공하는 예제입니다.
-<br>
-<br>
 Bluetooth Smart ECG PPG collects key vital signs information such as ECG, heart rate, SPO2, and temperature using AxDen's Aggregator Platform.
 <br>
 This is an example provided to quickly test various service scenarios that require communication between Android, iOS, and Aggregator.
 <br>
+<br>
+Related hardware kits can be purchased from the Naver Smart Store.
+<br>
+[Purchase Link : naver smart store](https://smartstore.naver.com/axden)
+<br>
+<br>
+You can purchase it by contacting sales@axden.io or [www.axden.io](http://www.axden.io/)
+<br>
 
 -------------------------
 
-### Bluetooth Smart ECG PPG 의 주요 특징 및 기능
+### Key features and functions.
 
-MCU | 설명
+MCU | Description
 :-------------------------:|:-------------------------:
 NRF52832 | BLE 5.0 / 5.1 / 5.2 / 5.3
 
-센서 | 설명
+Sensors | Description
 :-------------------------:|:-------------------------:
 MAX30003 | ECG(심전도), Heart rate(심박수) sensor
 MAX30101 | SPO2(산소포화도), Heart rate(심박수) sensor
 SI7051 | Temperature sensor
 
-*체온 측정이 필요한 경우 development@axden.io 로 문의 주시기 바랍니다.*
+*If you need a body temperature measurement, please contact development@axden.io.*
 
-Bluetooth Smart ECG PPG 예제는 ECG(심전도), Heart rate(심박수), SPO2(산소포화도), 온도 와 같은 핵심적인 활력 징후(Vital Signs) 정보를 수집하고 Bluetooth 통신을 이용하여 Android, iOS, Aggregator 에 전송합니다.
+The NRF52832 Smart ECG PPG example collects and transmits key vital signs information such as ECG (Ecardiogram), Heartrate (Heart Rate), SPO2 (Oxygen Saturated), and Temperature using Bluetooth communication.
 <br>
 <br>
-AxDen Aggregator Platform 과 연동하여 서버, DB 와 같은 인프라 구축 없이 Web 과 Mobile 에서 센서 정보를 확인합니다.
+Interwork with the AxDen Aggregator Platform to check sensor information on the Web and Mobile without building infrastructure such as servers and DBs.
 <br>
 <br>
-AxDen Aggregator Platform 에 저장된 센서 정보를 이용하여 Edge AI 를 학습시킵니다.
+Learn Edge AI using sensor information stored in the AxDen Aggregator Platform.
 <br>
 
 -------------------------
@@ -61,6 +64,9 @@ AxDen Aggregator Platform 에 저장된 센서 정보를 이용하여 Edge AI �
 <br>
 
 terminal baudrate : 9600
+<br>
+
+[Donwload Android Application](https://play.google.com/store/apps/details?id=io.axden.module.example.axden_ble_module_example)
 <br>
 
 <table>
@@ -105,27 +111,32 @@ terminal baudrate : 9600
 
 -------------------------
 
-#### AxDen Aggregator Platform 을 이용한 확인 방법
+### How to check using AXDEN Aggregator Platform
 
-AxDen Aggregator 홈페이지에서 회원 가입 후 Bluetooth Smart ECG PPG 의 MAC Address 를 등록합니다.
+Register the MAC Address of the device after signing up as a member on the AXDEN Aggregator Platform website.
 <br>
-AxDen Aggregator 홈페이지에서 제공하는 COMPANY ID, DEVICE ID 를 Protocol.h 파일의 COMPANY_ID, DEVICE_ID 에 입력합니다.
+
+Enter COMPANY ID nad DEVCIE ID provided on the AXDEN Aggregator Platform website into COMPANY_ID and DEVCIE_ID in the Protocol.h header file.
 <br>
+
+[AXDEN Aggregator Platfrom](http://project.axden.io/)
 <br>
+
 `#define COMPANY_ID 0`
 <br>
+
 `#define DEVICE_TYPE 0`
 <br>
-<br>
-컴파일 후 플래싱을 합니다.
-<br>
-<br>
-터미널을 통해 COMPANY_ID, DEVICE_ID 가 정상적으로 적용되었는지 확인합니다.
+
+Complie and flash.
 <br>
 <br>
-센서 정보를 Web 또는 Mobile 에서 확인할 수 있습니다.
+Check whether COMPANY_ID and DEVICE_ID are applied correctly through the terminal
+<br>
 <br>
 
+Sensor information can be found on the Web or Mobile.
+<br>
 
 -------------------------
 

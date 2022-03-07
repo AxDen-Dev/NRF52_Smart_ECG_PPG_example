@@ -46,7 +46,7 @@ void set_max30003_spi_instance(nrf_drv_spi_t spi_instance) {
 
 }
 
-void max30003_spi_write(uint8_t address, uint32_t data) {
+uint8_t max30003_spi_write(uint8_t address, uint32_t data) {
 
 	uint16_t timeout = UINT16_MAX;
 
@@ -67,9 +67,17 @@ void max30003_spi_write(uint8_t address, uint32_t data) {
 
 	}
 
+	if (!timeout) {
+
+		return 0x00;
+
+	}
+
+	return 0x01;
+
 }
 
-void max30003_spi_read(uint8_t address, uint32_t *data) {
+static uint8_t max30003_spi_read(uint8_t address, uint32_t *data) {
 
 	uint16_t timeout = UINT16_MAX;
 
@@ -92,11 +100,19 @@ void max30003_spi_read(uint8_t address, uint32_t *data) {
 	*data |= max30003_spi_read_buffer[2] << 8;
 	*data |= max30003_spi_read_buffer[3];
 
+	if (!timeout) {
+
+		return 0x00;
+
+	}
+
+	return 0x01;
+
 }
 
-void max30003_spi_read_ecg_sample(uint8_t address, int32_t *data) {
+static uint8_t max30003_spi_read_ecg_sample(uint8_t address, int32_t *data) {
 
-	//uint16_t timeout = UINT16_MAX;
+	uint16_t timeout = UINT16_MAX;
 
 	memset(max30003_spi_write_buffer, 0x00, sizeof(max30003_spi_write_buffer));
 	memset(max30003_spi_read_buffer, 0x00, sizeof(max30003_spi_read_buffer));
@@ -108,7 +124,7 @@ void max30003_spi_read_ecg_sample(uint8_t address, int32_t *data) {
 	nrf_drv_spi_transfer(&m_spi, max30003_spi_write_buffer, 4,
 			max30003_spi_read_buffer, 4);
 
-	while (!spi_xfer_done) {
+	while (!spi_xfer_done && --timeout) {
 
 	}
 
@@ -123,21 +139,37 @@ void max30003_spi_read_ecg_sample(uint8_t address, int32_t *data) {
 	uint32_t ecg = (uint32_t) (data0 | data1 | data2);
 	*data = (int32_t) ecg;
 
+	if (!timeout) {
+
+		return 0x00;
+
+	}
+
+	return 0x01;
+
 }
 
 uint8_t get_max30003_rev_id() {
 
 	max30003_info_reg max30003_info;
 
-	max30003_spi_read(MAX30003_INFO, &max30003_info.value);
+	uint8_t spi_state = max30003_spi_read(MAX30003_INFO, &max30003_info.value);
 
-	uint8_t id = max30003_info.bits.REV_ID;
+	if (spi_state) {
 
-	return id;
+		uint8_t id = max30003_info.bits.REV_ID;
+
+		return id;
+
+	}
+
+	return 0x00;
 
 }
 
-void init_max30003_mode_0() {
+uint8_t init_max30003_mode_0() {
+
+	uint8_t spi_state = 0x01;
 
 	max30003_sw_rst_reg max30003_sw_rst;
 	max30003_sw_rst.value = 0x00;
@@ -155,7 +187,8 @@ void init_max30003_mode_0() {
 	max30003_cnfg_gen.bits.EN_RBIAS = 1;
 	max30003_cnfg_gen.bits.IMAG = 2;
 	max30003_cnfg_gen.bits.EN_DCLOFF = 1; //01 = DCLOFF Detection applied to the ECGP/N pins
-	max30003_spi_write(MAX30003_CNFG_GEN, max30003_cnfg_gen.value);
+	spi_state = spi_state
+			& max30003_spi_write(MAX30003_CNFG_GEN, max30003_cnfg_gen.value);
 
 	max30003_cnfg_cal_reg max30003_cnfg_cal;
 //    max30003_cnfg_cal.value = 0x720000;
@@ -163,14 +196,16 @@ void init_max30003_mode_0() {
 	max30003_cnfg_cal.bits.EN_VCAL = 1;
 	max30003_cnfg_cal.bits.VMODE = 1;
 	max30003_cnfg_cal.bits.VMAG = 1;
-	max30003_spi_write(MAX30003_CNFG_CAL, max30003_cnfg_cal.value);
+	spi_state = spi_state
+			& max30003_spi_write(MAX30003_CNFG_CAL, max30003_cnfg_cal.value);
 
 	max30003_cnfg_emux_reg max30003_cnfg_emux;
 //    max30003_cnfg_emux.value = 0x0B0000;
 	max30003_cnfg_emux.value = 0x00;
 	max30003_cnfg_emux.bits.CALP_SEL = 2;
 	max30003_cnfg_emux.bits.CALN_SEL = 3;
-	max30003_spi_write(MAX30003_CNFG_EMUX, max30003_cnfg_emux.value);
+	spi_state = spi_state
+			& max30003_spi_write(MAX30003_CNFG_EMUX, max30003_cnfg_emux.value);
 
 	max30003_cnfg_ecg_reg max30003_cnfg_ecg;
 	//max30003_cnfg_ecg.value = 0x805000;
@@ -179,7 +214,8 @@ void init_max30003_mode_0() {
 	max30003_cnfg_ecg.bits.GAIN = 3;
 	max30003_cnfg_ecg.bits.DHPF = 1;
 	max30003_cnfg_ecg.bits.DLPF = 1;
-	max30003_spi_write(MAX30003_CNFG_ECG, max30003_cnfg_ecg.value);
+	spi_state = spi_state
+			& max30003_spi_write(MAX30003_CNFG_ECG, max30003_cnfg_ecg.value);
 
 	max30003_cnfg_rtor_reg max30003_cnfg_rtor;
 	//max30003_cnfg_rtor.value = 0x3FC600;
@@ -189,19 +225,26 @@ void init_max30003_mode_0() {
 	max30003_cnfg_rtor.bits.EN_RTOR = 1;
 	max30003_cnfg_rtor.bits.PAVG = 2;
 	max30003_cnfg_rtor.bits.PTSF = 3;
-	max30003_spi_write(MAX30003_CNFG_RTOR1, max30003_cnfg_rtor.value);
+	spi_state = spi_state
+			& max30003_spi_write(MAX30003_CNFG_RTOR1, max30003_cnfg_rtor.value);
 
 	max30003_synch_reg max30003_synch;
 	max30003_synch.value = 0x00;
-	max30003_spi_write(MAX30003_SYNCH, max30003_synch.value);
+	spi_state = spi_state
+			& max30003_spi_write(MAX30003_SYNCH, max30003_synch.value);
+
+	return spi_state;
 
 }
 
-void init_max30003_mode_1() {
+uint8_t init_max30003_mode_1() {
+
+	uint8_t spi_state = 0x01;
 
 	max30003_sw_rst_reg max30003_sw_rst;
 	max30003_sw_rst.value = 0x00;
-	max30003_spi_write(MAX30003_SW_RST, max30003_sw_rst.value);
+	spi_state = spi_state
+			& max30003_spi_write(MAX30003_SW_RST, max30003_sw_rst.value);
 
 	wait_100_ms_timer(5);
 
@@ -214,7 +257,8 @@ void init_max30003_mode_1() {
 	max30003_cnfg_gen.bits.EN_RBIAS = 1;
 	max30003_cnfg_gen.bits.IMAG = 2;
 	max30003_cnfg_gen.bits.EN_DCLOFF = 1; //01 = DCLOFF Detection applied to the ECGP/N pins
-	max30003_spi_write(MAX30003_CNFG_GEN, max30003_cnfg_gen.value);
+	spi_state = spi_state
+			& max30003_spi_write(MAX30003_CNFG_GEN, max30003_cnfg_gen.value);
 
 	max30003_cnfg_ecg_reg max30003_cnfg_ecg;
 	max30003_cnfg_ecg.value = 0x00;
@@ -222,61 +266,56 @@ void init_max30003_mode_1() {
 	max30003_cnfg_ecg.bits.GAIN = 3;
 	max30003_cnfg_ecg.bits.DHPF = 1;
 	max30003_cnfg_ecg.bits.DLPF = 1;
-	max30003_spi_write(MAX30003_CNFG_ECG, max30003_cnfg_ecg.value);
+	spi_state = spi_state
+			& max30003_spi_write(MAX30003_CNFG_ECG, max30003_cnfg_ecg.value);
 
 	max30003_cnfg_rtor_reg max30003_cnfg_rtor;
 	max30003_cnfg_rtor.value = 0x00;
 	max30003_cnfg_rtor.bits.EN_RTOR = 1;
-	max30003_spi_write(MAX30003_CNFG_RTOR1, max30003_cnfg_rtor.value);
+	spi_state = spi_state
+			& max30003_spi_write(MAX30003_CNFG_RTOR1, max30003_cnfg_rtor.value);
 
 	max30003_cnfg_emux_reg max30003_cnfg_emux;
 	max30003_cnfg_emux.value = 0x00;
 	max30003_cnfg_emux.bits.OPENN = 0;
 	max30003_cnfg_emux.bits.OPENP = 0;
-	max30003_spi_write(MAX30003_CNFG_EMUX, max30003_cnfg_emux.value);
+	spi_state = spi_state
+			& max30003_spi_write(MAX30003_CNFG_EMUX, max30003_cnfg_emux.value);
 
 	max30003_mngr_dyn_reg max30003_mngr_dyn;
 	max30003_mngr_dyn.value = 0x00;
 	max30003_mngr_dyn.bits.FAST = 0;
-	max30003_spi_write(MAX30003_MNGR_DYN, max30003_mngr_dyn.value);
+	spi_state = spi_state
+			& max30003_spi_write(MAX30003_MNGR_DYN, max30003_mngr_dyn.value);
 
 	max30003_synch_reg max30003_synch;
 	max30003_synch.value = 0x00;
-	max30003_spi_write(MAX30003_SYNCH, max30003_synch.value);
+	spi_state = spi_state
+			& max30003_spi_write(MAX30003_SYNCH, max30003_synch.value);
+
+	return spi_state;
 
 }
 
-void set_max30003_sync() {
+uint8_t set_max30003_sync() {
 
 	max30003_synch_reg max30003_synch;
 	max30003_synch.value = 0x00;
-	max30003_spi_write(MAX30003_SYNCH, max30003_synch.value);
+	return max30003_spi_write(MAX30003_SYNCH, max30003_synch.value);
 
 }
 
-void set_max30003_fifo_reset() {
+uint8_t set_max30003_fifo_reset() {
 
 	max30003_fifo_rst_reg max30003_fifo_rst;
 	max30003_fifo_rst.value = 0x00;
-	max30003_spi_write(MAX30003_FIFO_RST, max30003_fifo_rst.value);
+	return max30003_spi_write(MAX30003_FIFO_RST, max30003_fifo_rst.value);
 
 }
 
-int32_t get_max30003_ecg_voltage_sample() {
+uint8_t get_max30003_ecg_voltage_sample(int32_t *value) {
 
-	int32_t value;
-	max30003_spi_read_ecg_sample(MAX30003_ECG, &value);
-
-	return value;
+	return max30003_spi_read_ecg_sample(MAX30003_ECG, value);
 
 }
 
-uint32_t get_max30003_rtor_interval() {
-
-	max30003_rtor_reg max30003_rtor;
-	max30003_rtor.value = 0x00;
-	max30003_spi_read(MAX30003_RTOR, &max30003_rtor.value);
-
-	return max30003_rtor.bits.RTOR_INTERVAL;
-
-}

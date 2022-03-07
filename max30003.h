@@ -13,16 +13,14 @@ void set_max30003_spi_instance(nrf_drv_spi_t spi_instance);
 
 uint8_t get_max30003_rev_id();
 
-void init_max30003_mode_0();
+uint8_t init_max30003_mode_0();
 
-void init_max30003_mode_1();
+uint8_t init_max30003_mode_1();
 
-void set_max30003_sync();
+uint8_t set_max30003_sync();
 
-void set_max30003_fifo_reset();
+uint8_t set_max30003_fifo_reset();
 
-int32_t get_max30003_ecg_voltage_sample();
-
-uint32_t get_max30003_rtor_interval();
+uint8_t get_max30003_ecg_voltage_sample(int32_t *value);
 
 #endif /* MAX30003_H_ */

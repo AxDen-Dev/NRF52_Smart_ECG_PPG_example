@@ -131,6 +131,7 @@ static const nrf_drv_spi_t m_spi = NRF_DRV_SPI_INSTANCE(1);
 static nrf_saadc_value_t m_buffer_pool_low_power[2][SAADC_SAMPLES_IN_BUFFER];
 static volatile uint8_t m_saadc_initialized = 0x00;
 
+static volatile uint8_t one_sec_timer_update = 0x00;
 static volatile uint8_t app_timer_update = 0x00;
 static volatile uint8_t sensor_timer_update = 0x00;
 volatile uint8_t max30003_100_ms_timer = 0x00;
@@ -157,11 +158,16 @@ static volatile uint8_t data_update_state = 0x00;
 
 static uint8_t mac_address[8] = { 0x00 };
 
-static uint8_t payload_size = 0;
-static uint8_t payload[213];
+static packet_header_0_t packet_header_0;
+static packet_header_1_t packet_header_1;
+static packet_event_0_t packet_event_0;
+static packet_event_1_t packet_event_1;
+static product_id_t product_id;
 
-static uint8_t radio_packet_protocol_size = 0;
-static radio_packet_protocol_t radio_packet_protocol;
+static volatile uint8_t packet_id = 0;
+static volatile uint8_t command_id = 0;
+static volatile uint8_t node_packet_data_size;
+static node_packet_data_t node_packet_data;
 
 static uint32_t collection_cycle_timeout_count = COLLECTION_CYCLE_TIMEOUT;
 static uint32_t collection_cycle_timer_count = 0;
@@ -210,6 +216,8 @@ static void app_time_timeout_handler(void *p_context) {
 			collection_cycle_timer_count = 0;
 
 		}
+
+		one_sec_timer_update = 0x01;
 
 		one_sec_timer_count = 0;
 
@@ -368,15 +376,7 @@ static void nrf_qwr_error_handler(uint32_t nrf_error) {
 static void ble_service_tx_complete_handler(uint16_t conn_handle,
 		ble_service_t *p_service) {
 
-	if (aggregator_notify_enable_state) {
-
-		tx_complete_state = 0x02;
-
-	} else if (stream_notify_enable_state) {
-
-		tx_complete_state = 0x01;
-
-	}
+	tx_complete_state = 0x02;
 
 	NRF_LOG_INFO("TX complete %d", tx_complete_state);
 
@@ -412,7 +412,7 @@ static void ble_service_write_handler(uint16_t conn_handle,
 
 		uint8_t control_number = buffer[0];
 
-		if (radio_packet_protocol.Packet.control_number != control_number) {
+		if (command_id != control_number) {
 
 			uint32_t collection_cycle = buffer[1] << 24;
 			collection_cycle |= buffer[2] << 16;
@@ -424,7 +424,7 @@ static void ble_service_write_handler(uint16_t conn_handle,
 				collection_cycle_timeout_count = 0;
 				collection_cycle_timer_count = collection_cycle;
 
-				radio_packet_protocol.Packet.control_number = control_number;
+				command_id = control_number;
 
 			}
 
@@ -788,8 +788,11 @@ static uint8_t update_Heartrate_SPO2() {
 
 }
 
-static void update_ECG() {
+static uint8_t update_ECG() {
 
+	uint8_t spi_state = 0x01;
+
+	int32_t sample = 0;
 	uint16_t printCount = 0;
 
 	app_timer_start(m_sensor_timer_id, MAX30003_APP_TIMER_DELAY, NULL);
@@ -798,7 +801,7 @@ static void update_ECG() {
 
 	for (uint32_t i = 0; i < 7500; i++) {
 
-		int32_t sample = get_max30003_ecg_voltage_sample();
+		spi_state = spi_state & get_max30003_ecg_voltage_sample(&sample);
 
 		sample = update_ecg_algorithm(sample);
 
@@ -827,21 +830,7 @@ static void update_ECG() {
 
 	app_timer_stop(m_sensor_timer_id);
 
-}
-
-static void get_mac_address() {
-
-	uint32_t err_code;
-	ble_gap_addr_t addr;
-
-	err_code = sd_ble_gap_addr_get(&addr);
-	APP_ERROR_CHECK(err_code);
-
-	for (uint8_t i = 0; i < 6; i++) {
-
-		mac_address[5 - i] = addr.addr[i];
-
-	}
+	return spi_state;
 
 }
 
@@ -1189,11 +1178,123 @@ static void gpio_init() {
 
 }
 
+static void build_event_packet(uint8_t event_type) {
+
+//	uint8_t header_0;
+//	uint8_t header_1;
+//	uint8_t mac_address[8];
+//	uint8_t product_id[2];
+//	uint8_t event_value_0;
+//	uint8_t event_value_1;
+
+	packet_header_0.bits.PACKET_TYPE = PACKET_TYPE_UPLINK_EVENT_HEADER_0;
+
+	node_packet_data.Event_Packet.header_0 = packet_header_0.value;
+	node_packet_data.Event_Packet.header_1 = packet_header_1.value;
+
+	memcpy(node_packet_data.Event_Packet.mac_address, mac_address,
+			sizeof(mac_address));
+
+	node_packet_data.Event_Packet.product_id[0] = product_id.value >> 8;
+	node_packet_data.Event_Packet.product_id[1] = product_id.value;
+
+	packet_event_0.bits.EVENT_TYPE = event_type;
+	node_packet_data.Event_Packet.event_value_0 = packet_event_0.value;
+	node_packet_data.Event_Packet.event_value_1 = packet_event_1.value;
+
+	node_packet_data_size = NODE_EVENT_PACKET_SIZE;
+
+	NRF_LOG_INFO("build_event_packet");
+
+}
+
+static void build_sensor_data_packet() {
+
+//	uint8_t header_0;
+//	uint8_t header_1;
+//	uint8_t mac_address[8];
+//	uint8_t packet_info; //11Byte
+//	uint8_t battery_value;
+//	uint8_t temperature[2];
+//	uint8_t green_heart_rate;
+//	uint8_t green_heart_rate_count;
+//	uint8_t ir_heart_rate;
+//	uint8_t ir_heart_rate_count;
+//	uint8_t spo2;
+//	uint8_t spo2_count;
+//	uint8_t ecg_heart_rate;
+//	uint8_t ecg_heart_rate_count;
+
+	packet_header_0.bits.PACKET_TYPE = PACKET_TYPE_UPLINK_SENSOR_DATA_HEADER_0;
+
+	node_packet_data.Data_Packet.header_0 = packet_header_0.value;
+	node_packet_data.Data_Packet.header_1 = packet_header_1.value;
+
+	memcpy(node_packet_data.Data_Packet.mac_address, mac_address,
+			sizeof(mac_address));
+
+	node_packet_data.Data_Packet.packet_info = (command_id << 4) & 0xF0;
+	node_packet_data.Data_Packet.packet_info |= (packet_id & 0x0F);
+
+	node_packet_data.Data_Packet.battery_value = battery_value;
+
+	node_packet_data.Data_Packet.temperature[0] = temperature >> 8;
+	node_packet_data.Data_Packet.temperature[1] = temperature;
+
+	node_packet_data.Data_Packet.green_heart_rate = green_heart_rate;
+	node_packet_data.Data_Packet.green_heart_rate_count =
+			green_heart_rate_count;
+
+	node_packet_data.Data_Packet.ir_heart_rate = ir_heart_rate;
+	node_packet_data.Data_Packet.ir_heart_rate_count = ir_heart_rate_count;
+
+	node_packet_data.Data_Packet.spo2 = spo2;
+	node_packet_data.Data_Packet.spo2_count = spo2_count;
+
+	node_packet_data.Data_Packet.ecg_heart_rate = ecg_heart_rate;
+	node_packet_data.Data_Packet.ecg_heart_rate_count = ecg_heart_rate_count;
+
+	node_packet_data_size = NODE_DATA_PACKET_SIZE;
+
+	packet_id += 1;
+
+	if (packet_id > 0x0F) {
+
+		packet_id = 0;
+
+	}
+
+	NRF_LOG_INFO("build_sensor_data_packet");
+
+}
+
 /**@brief Function for application main entry.
  */
 int main(void) {
 
+	uint8_t event_init = 0x00;
+	uint8_t event_type = EVENT_TYPE_POWER_ON;
+
+	uint8_t event_packet_ready = 0x00;
+	uint8_t sensor_data_packet_ready = 0x00;
+
 	uint8_t battery_read_step = 0x00;
+
+	uint8_t on_off_state = 0x01;
+	uint8_t on_off_count = 0;
+
+	uint32_t device_id_0 = NRF_FICR->DEVICEID[1];
+	uint32_t device_id_1 = NRF_FICR->DEVICEID[0];
+
+	mac_address[0] = device_id_0 >> 24;
+	mac_address[1] = device_id_0 >> 16;
+	mac_address[2] = device_id_0 >> 8;
+	mac_address[3] = device_id_0;
+
+	mac_address[4] = device_id_1 >> 24;
+	mac_address[5] = device_id_1 >> 16;
+	mac_address[6] = device_id_1 >> 8;
+	mac_address[7] = device_id_1;
 
 	log_init();
 
@@ -1227,13 +1328,33 @@ int main(void) {
 
 	conn_params_init();
 
-	advertising_start();
-
 	app_timer_start(m_app_timer_id, APP_TIMER_DELAY, NULL);
 
-	set_uart_usb_in_out_write_string("Start AxDen Smart ECG PPG example");
+	/////////////////////// Init Protocol Data /////////////////////
 
-	get_mac_address();
+	packet_header_0.value = 0x00;
+	packet_header_0.bits.DEVICE_ROLE = 0x00;
+	packet_header_0.bits.PACKET_TYPE = PACKET_TYPE_UPLINK_EVENT_HEADER_0;
+	packet_header_0.bits.CHIP_MANUFACTURER = CHIP_MANUFACTURER_NORDIC;
+
+	packet_header_1.value = 0x00;
+	packet_header_1.bits.CHIP_IDENTIFIER = CHIP_IDENTIFIER_NRF52832;
+	packet_header_1.bits.COMMUNICATION_TYPE =
+	COMMUNICATION_TYPE_BLE_CONNECTION_1M;
+
+	product_id.value = 0x00;
+	product_id.bits.PRODUCT_ID = PRODUCT_ID_AA_MB_02;
+	product_id.bits.DEVICE_TYPE = 0x00;
+	product_id.bits.PRODUCT_TYPE = 0x01;
+
+	packet_event_0.value = 0x00;
+	packet_event_0.bits.EVENT_TYPE = EVENT_TYPE_POWER_ON;
+
+	packet_event_1.value = 0x00;
+
+	//////////////////// Start Application ///////////////////
+
+	set_uart_usb_in_out_write_string("Start AxDen Smart ECG PPG example");
 
 	set_uart_usb_in_out_mac_address(mac_address);
 
@@ -1245,23 +1366,44 @@ int main(void) {
 
 	set_max30101_i2c_instance(m_twi);
 
-	init_max30101();
+	if (!init_max30101()) {
+
+		packet_event_1.bits.MAX30101_ERROR = 0x01;
+
+	}
 
 	set_si7051_i2c_instance(m_twi);
 
-	init_si7051();
+	if (!init_si7051()) {
+
+		packet_event_1.bits.SI7051_ERROR = 0x01;
+
+	}
 
 	wait_200ms();
 
-	get_si7051_temperature(&temperature);
+	if (!get_si7051_temperature(&temperature)) {
+
+		packet_event_1.bits.SI7051_ERROR = 0x01;
+
+	}
 
 	set_max30003_spi_instance(m_spi);
 
 	uint8_t rev_id = get_max30003_rev_id();
+
+	if (rev_id == 0x00) {
+
+		packet_event_1.bits.MAX30003_ERROR = 0x01;
+
+	} else {
+
+		init_max30003_mode_0();
+
+	}
+
 	NRF_LOG_INFO("MAX30003 REV ID %02X", rev_id);
 	NRF_LOG_FLUSH();
-
-	init_max30003_mode_0();
 
 	nrf_gpio_pin_set(GPIO_BAT_EN);
 
@@ -1269,114 +1411,169 @@ int main(void) {
 
 	read_battery_level();
 
+	//////////////////// Print Value ///////////////////
+
 	NRF_LOG_INFO("Print sensor value");
 
 	set_uart_usb_in_out_battery(battery_value);
 
 	set_uart_usb_in_out_temperature(temperature);
 
+	//////////////////// Start Main Loop ///////////////////
+
+	event_packet_ready = 0x01;
+	data_update_state = 0x01;
+	advertising_init(data_update_state);
+
+	advertising_start();
+
 	NRF_LOG_INFO("Start main loop");
-
-	radio_packet_protocol.Packet.company_id[0] = COMPANY_ID >> 8;
-	radio_packet_protocol.Packet.company_id[1] = COMPANY_ID;
-
-	radio_packet_protocol.Packet.device_id[0] = DEVICE_TYPE >> 8;
-	radio_packet_protocol.Packet.device_id[1] = DEVICE_TYPE;
-
-	memcpy(radio_packet_protocol.Packet.mac_address, mac_address, 8);
-
-	radio_packet_protocol.Packet.control_number = 0;
 
 	for (;;) {
 
-		if (!nrf_gpio_pin_read(GPIO_BTN)) {
+		if (one_sec_timer_update) {
 
-			nrf_gpio_pin_toggle(GPIO_LED_0);
+			if (!nrf_gpio_pin_read(GPIO_BTN)) {
 
-		}
+				on_off_count += 1;
 
-		if (collection_cycle_update) {
+				if (on_off_count >= 3) {
 
-			if (battery_read_step == 0x00) {
+					if (on_off_state) {
 
-				nrf_gpio_pin_set(GPIO_BAT_EN);
+						event_type = EVENT_TYPE_POWER_OFF;
 
-				battery_read_step = 0x01;
+						NRF_LOG_INFO("EVENT_TYPE_POWER_OFF");
 
-			} else {
+					} else {
 
-				read_battery_level();
+						event_type = EVENT_TYPE_POWER_ON;
 
-				get_si7051_temperature(&temperature);
+						NRF_LOG_INFO("EVENT_TYPE_POWER_ON");
 
-				nrf_gpio_pin_clear(GPIO_LED_1);
+					}
 
-				update_ECG();
+					event_init = 0x00;
+					event_packet_ready = 0x01;
+					data_update_state = 0x01;
 
-				update_Heartrate_SPO2();
+					if (m_conn_handle == BLE_CONN_HANDLE_INVALID) {
 
-				payload_size = 0;
-				memset(payload, 0x00, sizeof(payload));
+						adversting_stop();
+						gap_params_init();
+						advertising_init(data_update_state);
+						advertising_start();
 
-				payload_size = sprintf((char*) payload, "%d.%d,",
-						(battery_value / 10), (battery_value % 10));
+					} else {
 
-				payload_size += sprintf((char*) payload + payload_size,
-						"%d.%d,", (temperature / 10), abs(temperature % 10));
+						sd_ble_gap_disconnect(m_conn_handle,
+						BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
 
-				payload_size += sprintf((char*) payload + payload_size, "%d,",
-						green_heart_rate);
+					}
 
-				payload_size += sprintf((char*) payload + payload_size, "%d,",
-						green_heart_rate_count);
+					on_off_state = !on_off_state;
+					on_off_count = 0;
 
-				payload_size += sprintf((char*) payload + payload_size, "%d,",
-						ir_heart_rate);
-
-				payload_size += sprintf((char*) payload + payload_size, "%d,",
-						ir_heart_rate_count);
-
-				payload_size += sprintf((char*) payload + payload_size, "%d,",
-						spo2);
-
-				payload_size += sprintf((char*) payload + payload_size, "%d,",
-						spo2_count);
-
-				payload_size += sprintf((char*) payload + payload_size, "%d,",
-						ecg_heart_rate);
-
-				payload_size += sprintf((char*) payload + payload_size, "%d,",
-						ecg_heart_rate_count);
-
-				radio_packet_protocol_size = PACKET_HEADER_SIZE;
-				radio_packet_protocol_size += payload_size;
-				memcpy(radio_packet_protocol.Packet.payload, payload,
-						payload_size);
-
-				radio_packet_protocol_size = PACKET_HEADER_SIZE;
-				radio_packet_protocol_size += payload_size;
-				memcpy(radio_packet_protocol.Packet.payload, payload,
-						payload_size);
-
-				battery_read_step = 0x00;
-
-				collection_cycle_update = 0x00;
-
-				if (m_conn_handle == BLE_CONN_HANDLE_INVALID) {
-
-					adversting_stop();
-
-					gap_params_init();
-
-					advertising_init(data_update_state);
-
-					advertising_start();
+					NRF_LOG_INFO("on_off_state %d", on_off_state);
 
 				}
 
-				data_update_state = 0x01;
+				nrf_gpio_pin_clear(GPIO_LED_0);
 
-				NRF_LOG_INFO("Data Update");
+			} else {
+
+				on_off_count = 0;
+
+				nrf_gpio_pin_set(GPIO_LED_0);
+
+			}
+
+			one_sec_timer_update = 0x00;
+
+		}
+
+		if (on_off_state && event_init) {
+
+			if (collection_cycle_update) {
+
+				if (battery_read_step == 0x00) {
+
+					nrf_gpio_pin_set(GPIO_BAT_EN);
+
+					battery_read_step = 0x01;
+
+				} else {
+
+					read_battery_level();
+
+					packet_event_1.bits.SI7051_ERROR = 0x00;
+
+					if (!get_si7051_temperature(&temperature)) {
+
+						event_type = EVENT_TYPE_RUN_TIME_EVENT;
+						event_packet_ready = 0x01;
+
+						packet_event_1.bits.SI7051_ERROR = 0x01;
+
+						NRF_LOG_INFO("SI7051_ERROR");
+
+					} else {
+
+						NRF_LOG_INFO("temperature %d", temperature);
+
+					}
+
+					nrf_gpio_pin_clear(GPIO_LED_1);
+
+					packet_event_1.bits.MAX30003_ERROR = 0x00;
+
+					if (!update_ECG()) {
+
+						event_type = EVENT_TYPE_RUN_TIME_EVENT;
+						event_packet_ready = 0x01;
+
+						packet_event_1.bits.MAX30003_ERROR = 0x01;
+
+						NRF_LOG_INFO("MAX30003_ERROR");
+
+					}
+
+					packet_event_1.bits.MAX30101_ERROR = 0x00;
+
+					if (!update_Heartrate_SPO2()) {
+
+						event_type = EVENT_TYPE_RUN_TIME_EVENT;
+						event_packet_ready = 0x01;
+
+						packet_event_1.bits.MAX30101_ERROR = 0x01;
+
+						NRF_LOG_INFO("MAX30101_ERROR");
+
+					}
+
+					sensor_data_packet_ready = 0x01;
+
+					battery_read_step = 0x00;
+
+					collection_cycle_update = 0x00;
+
+					data_update_state = 0x01;
+
+					if (m_conn_handle == BLE_CONN_HANDLE_INVALID) {
+
+						adversting_stop();
+
+						gap_params_init();
+
+						advertising_init(data_update_state);
+
+						advertising_start();
+
+					}
+
+					NRF_LOG_INFO("Data Update");
+
+				}
 
 			}
 
@@ -1384,51 +1581,77 @@ int main(void) {
 
 		if (m_conn_handle != BLE_CONN_HANDLE_INVALID) {
 
-			if (aggregator_notify_enable_state) {
+			if (aggregator_notify_enable_state || stream_notify_enable_state) {
 
-				if (data_update_state) {
+				if (event_packet_ready || sensor_data_packet_ready) {
 
 					if (tx_complete_state == 0x01) {
 
 						tx_complete_state = 0x00;
 
-						ble_service_send_aggregator_notification(m_conn_handle,
-								&m_service, radio_packet_protocol.buffer,
-								radio_packet_protocol_size);
+						if (event_packet_ready == 0x01) {
 
-						data_update_state = 0x00;
+							build_event_packet(event_type);
 
-						NRF_LOG_INFO("Aggregator notify send");
+						} else if (sensor_data_packet_ready == 0x01) {
+
+							build_sensor_data_packet();
+
+						}
+
+						if (aggregator_notify_enable_state) {
+
+							ble_service_send_aggregator_notification(
+									m_conn_handle, &m_service,
+									node_packet_data.buffer,
+									node_packet_data_size);
+
+							NRF_LOG_INFO("Gateway notify send");
+
+						} else if (stream_notify_enable_state) {
+
+							ble_service_send_stream_notification(m_conn_handle,
+									&m_service, node_packet_data.buffer,
+									node_packet_data_size);
+
+							NRF_LOG_INFO("Stream notify send");
+
+						}
 
 					} else if (tx_complete_state == 0x02) {
 
-						disconnect_timeout_count = DISCONNECT_TIMEOUT;
+						if (event_packet_ready == 0x01) {
+
+							event_packet_ready = 0x00;
+
+						} else if (sensor_data_packet_ready == 0x01) {
+
+							sensor_data_packet_ready = 0x00;
+
+						}
+
+						if (!event_packet_ready && !sensor_data_packet_ready) {
+
+							data_update_state = 0x00;
+							disconnect_timeout_count = DISCONNECT_TIMEOUT;
+
+						} else {
+
+							tx_complete_state = 0x01;
+
+						}
+
+						event_init = 0x01;
 
 					}
 
 				}
 
-			} else if (stream_notify_enable_state) {
+				if (stream_notify_enable_state) {
 
-				if (data_update_state) {
-
-					if (tx_complete_state) {
-
-						tx_complete_state = 0x00;
-
-						ble_service_send_stream_notification(m_conn_handle,
-								&m_service, radio_packet_protocol.buffer,
-								radio_packet_protocol_size);
-
-						data_update_state = 0x00;
-
-						NRF_LOG_INFO("Stream notify send");
-
-					}
+					disconnect_timeout_count = 0;
 
 				}
-
-				disconnect_timeout_count = 0;
 
 			}
 
